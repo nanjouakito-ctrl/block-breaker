@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ブロック崩し</title>
+<style>
+    body {
+        background: #111;
+        text-align: center;
+        color: white;
+        font-family: sans-serif;
+    }
+    canvas {
+        background: black;
+        display: block;
+        margin: 0 auto;
+    }
+    #downloads {
+        display: none;
+        margin-top: 10px;
+    }
+    a {
+        color: #7cf;
+    }
+</style>
+</head>
+<body>
+
+<h1>ブロック崩し</h1>
+<canvas id="game" width="480" height="320"></canvas>
+
+<div id="downloads">
+    <a href="background.jpg" download>背景画像をダウンロード</a> |
+    <a href="cover.png" download>ブロック画像をダウンロード</a>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// ===== 画像 =====
+const bgImg = new Image();
+bgImg.src = 'background.jpg';
+
+const coverImg = new Image();
+coverImg.src = 'cover.png';
+
+// ===== 状態 =====
+let gameStarted = false;
+let gameOver = false;
+let gameClear = false;
+
+let lives = 3;
+
+const CLEAR_RATE = 0.95;
+
+// ===== パドル =====
+const paddle = {
+    w: 80,
+    h: 10,
+    x: 200,
+    y: 300,
+    speed: 6
+};
+
+// ===== ボール =====
+const ball = {
+    x: 240,
+    y: 200,
+    r: 6,
+    vx: 3,
+    vy: -3
+};
+
+function resetBall() {
+    ball.x = canvas.width / 2;
+    ball.y = paddle.y - 20;
+    ball.vx = 3 * (Math.random() < 0.5 ? -1 : 1);
+    ball.vy = -3;
+}
+
+// ===== ブロック =====
+const rows = 4;
+const cols = 8;
+const bw = 60;
+const bh = 30;
+
+let blocks = [];
+for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+        blocks.push({ x: x * bw, y: y * bh, alive: true });
+    }
+}
+const totalBlocks = blocks.length;
+let brokenBlocks = 0;
+
+// ===== 覆い用キャンバス =====
+const coverCanvas = document.createElement('canvas');
+coverCanvas.width = canvas.width;
+coverCanvas.height = canvas.height;
+const coverCtx = coverCanvas.getContext('2d');
+
+function initCover() {
+    coverCtx.clearRect(0, 0, canvas.width, canvas.height);
+    coverCtx.drawImage(coverImg, 0, 0, canvas.width, canvas.height);
+}
+
+// ===== 入力 =====
+let left = false;
+let right = false;
+
+document.addEventListener('keydown', e => {
+    if (e.code === 'Space') {
+
+        if (gameOver || gameClear) {
+            lives = 3;
+            brokenBlocks = 0;
+            gameOver = false;
+            gameClear = false;
+            blocks.forEach(b => b.alive = true);
+            initCover();
+            resetBall();
+            document.getElementById('downloads').style.display = 'none';
+        }
+
+        gameStarted = true;
+        loop();
+        return;
+    }
+
+    if (!gameStarted) return;
+
+    if (e.key === 'ArrowLeft') left = true;
+    if (e.key === 'ArrowRight') right = true;
+});
+
+document.addEventListener('keyup', e => {
+    if (e.key === 'ArrowLeft') left = false;
+    if (e.key === 'ArrowRight') right = false;
+});
+
+// ===== 更新 =====
+const MAX_ANGLE = Math.PI / 3;
+
+function update() {
+    // パドル
+    if (left) paddle.x -= paddle.speed;
+    if (right) paddle.x += paddle.speed;
+    paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, paddle.x));
+
+    // ボール
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+
+    // 壁
+    if (ball.x < ball.r || ball.x > canvas.width - ball.r) ball.vx *= -1;
+    if (ball.y < ball.r) ball.vy *= -1;
+
+    // パドル反射（角度付き）
+    if (
+        ball.y + ball.r > paddle.y &&
+        ball.y + ball.r < paddle.y + paddle.h &&
+        ball.x > paddle.x &&
+        ball.x < paddle.x + paddle.w &&
+        ball.vy > 0
+    ) {
+        const center = paddle.x + paddle.w / 2;
+        const hitRatio = (ball.x - center) / (paddle.w / 2);
+        const angle = hitRatio * MAX_ANGLE;
+        const speed = Math.sqrt(ball.vx ** 2 + ball.vy ** 2);
+
+        ball.vx = speed * Math.sin(angle);
+        ball.vy = -speed * Math.cos(angle);
+        ball.y = paddle.y - ball.r;
+    }
+
+    // ブロック
+    blocks.forEach(b => {
+        if (!b.alive) return;
+        if (
+            ball.x > b.x &&
+            ball.x < b.x + bw &&
+            ball.y > b.y &&
+            ball.y < b.y + bh
+        ) {
+            b.alive = false;
+            brokenBlocks++;
+            ball.vy *= -1;
+            coverCtx.clearRect(b.x, b.y, bw, bh);
+
+            if (brokenBlocks / totalBlocks >= CLEAR_RATE) {
+                gameClear = true;
+                gameStarted = false;
+                document.getElementById('downloads').style.display = 'block';
+            }
+        }
+    });
+
+    // 落下
+    if (ball.y > canvas.height) {
+        lives--;
+        if (lives <= 0) {
+            gameOver = true;
+            gameStarted = false;
+        } else {
+            gameStarted = false;
+            resetBall();
+        }
+    }
+}
+
+// ===== 描画 =====
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(coverCanvas, 0, 0);
+
+    ctx.fillStyle = 'white';
+    ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
+
+    ctx.beginPath();
+    ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = 'white';
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`LIFE: ${lives}`, 10, canvas.height - 10);
+
+    if (!gameStarted) {
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = 'white';
+        ctx.textAlign = 'center';
+
+        if (gameClear) {
+            ctx.font = '26px sans-serif';
+            ctx.fillText('GAME CLEAR!', canvas.width / 2, canvas.height / 2);
+        } else if (gameOver) {
+            ctx.font = '26px sans-serif';
+            ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2);
+        } else {
+            ctx.font = '24px sans-serif';
+            ctx.fillText('PRESS SPACE', canvas.width / 2, canvas.height / 2);
+        }
+    }
+}
+
+// ===== ループ =====
+function loop() {
+    if (!gameStarted) return;
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+// ===== 初期化 =====
+Promise.all([
+    new Promise(r => bgImg.onload = r),
+    new Promise(r => coverImg.onload = r)
+]).then(() => {
+    initCover();
+    resetBall();
+    draw();
+});
+</script>
+
+</body>
+</html>
