@@ -11,7 +11,6 @@ body {
     text-align: center;
     font-family: sans-serif;
 }
-
 canvas {
     display: block;
     margin: 0 auto;
@@ -19,14 +18,9 @@ canvas {
     height: auto;
     touch-action: none;
 }
-
-#downloads {
-    display: none;
+#message {
     margin: 10px;
-}
-
-a {
-    color: #7cf;
+    font-size: 18px;
 }
 </style>
 </head>
@@ -34,24 +28,25 @@ a {
 
 <h1>ブロック崩し</h1>
 <canvas id="game"></canvas>
-
-<div id="downloads">
-    <a href="stage2.jpg" download>背景画像をダウンロード</a> |
-    <a href="stage1.jpg" download>ブロック画像をダウンロード</a>
-</div>
+<div id="message"></div>
 
 <script>
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
+const message = document.getElementById('message');
 
-// ===== 画像 =====
-const bgImg = new Image();
-bgImg.src = 'stage2.jpg';
+// ===== ステージ画像 =====
+const stageImages = [
+    'stage1.jpg',
+    'stage2.jpg',
+    'stage3.jpg'
+];
 
-const coverImg = new Image();
-coverImg.src = 'stage1.jpg';
+let bgImg = new Image();
+let coverImg = new Image();
 
-// ===== 状態 =====
+// ===== ゲーム状態 =====
+let stage = 0;
 let gameStarted = false;
 let gameOver = false;
 let gameClear = false;
@@ -89,54 +84,63 @@ let rows = 4;
 let cols = 8;
 let bw, bh;
 let blocks = [];
-let totalBlocks = 0;
 let brokenBlocks = 0;
+let totalBlocks = 0;
 
 // ===== 覆いキャンバス =====
 const coverCanvas = document.createElement('canvas');
 const coverCtx = coverCanvas.getContext('2d');
 
-function initCover() {
-    coverCtx.clearRect(0, 0, canvas.width, canvas.height);
-    coverCtx.drawImage(coverImg, 0, 0, canvas.width, canvas.height);
-}
-
-// ===== レイアウト初期化 =====
-function initGameLayout() {
-    // canvasサイズを画像基準で設定
-    canvas.width = bgImg.width;
-    canvas.height = bgImg.height;
-
-    coverCanvas.width = canvas.width;
-    coverCanvas.height = canvas.height;
-
-    // パドル
-    paddle.y = canvas.height - 20;
-    paddle.x = (canvas.width - paddle.w) / 2;
-
-    // ブロック
-    const blockAreaHeight = canvas.height * 0.3;
-    bw = canvas.width / cols;
-    bh = blockAreaHeight / rows;
-
-    blocks = [];
-    for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
-            blocks.push({
-                x: x * bw,
-                y: y * bh,
-                alive: true
-            });
-        }
-    }
-
-    totalBlocks = blocks.length;
+// ===== ステージ初期化 =====
+function loadStage() {
+    gameStarted = false;
     brokenBlocks = 0;
 
-    resetBall();
+    bgImg = new Image();
+    bgImg.src = stageImages[stage];
+
+    coverImg = new Image();
+    coverImg.src = stage === 0 ? stageImages[0] : stageImages[stage - 1];
+
+    Promise.all([
+        new Promise(r => bgImg.onload = r),
+        new Promise(r => coverImg.onload = r)
+    ]).then(() => {
+        canvas.width = bgImg.width;
+        canvas.height = bgImg.height;
+        coverCanvas.width = bgImg.width;
+        coverCanvas.height = bgImg.height;
+
+        paddle.y = canvas.height - 20;
+        paddle.x = (canvas.width - paddle.w) / 2;
+
+        const blockAreaHeight = canvas.height * 0.3;
+        bw = canvas.width / cols;
+        bh = blockAreaHeight / rows;
+
+        blocks = [];
+        for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+                blocks.push({
+                    x: x * bw,
+                    y: y * bh,
+                    alive: true
+                });
+            }
+        }
+
+        totalBlocks = blocks.length;
+
+        coverCtx.clearRect(0, 0, canvas.width, canvas.height);
+        coverCtx.drawImage(coverImg, 0, 0);
+
+        resetBall();
+        draw();
+        message.textContent = `STAGE ${stage + 1}`;
+    });
 }
 
-// ===== 入力（キーボード） =====
+// ===== 入力 =====
 let left = false;
 let right = false;
 
@@ -146,25 +150,24 @@ document.addEventListener('keydown', e => {
     if (e.key === 'ArrowLeft') left = true;
     if (e.key === 'ArrowRight') right = true;
 });
-
 document.addEventListener('keyup', e => {
     if (e.key === 'ArrowLeft') left = false;
     if (e.key === 'ArrowRight') right = false;
 });
 
-// ===== 入力（タッチ） =====
+// タッチ
 canvas.addEventListener('touchstart', e => {
     e.preventDefault();
     startGame();
-    movePaddleByTouch(e);
+    movePaddle(e);
 }, { passive: false });
 
 canvas.addEventListener('touchmove', e => {
     e.preventDefault();
-    movePaddleByTouch(e);
+    movePaddle(e);
 }, { passive: false });
 
-function movePaddleByTouch(e) {
+function movePaddle(e) {
     const rect = canvas.getBoundingClientRect();
     const x = e.touches[0].clientX - rect.left;
     paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, x - paddle.w / 2));
@@ -172,19 +175,10 @@ function movePaddleByTouch(e) {
 
 // ===== ゲーム開始 =====
 function startGame() {
+    if (gameOver || gameClear) return;
     if (gameStarted) return;
-
-    if (gameOver || gameClear) {
-        lives = 3;
-        gameOver = false;
-        gameClear = false;
-        blocks.forEach(b => b.alive = true);
-        brokenBlocks = 0;
-        initCover();
-        document.getElementById('downloads').style.display = 'none';
-    }
-
     gameStarted = true;
+    message.textContent = '';
     loop();
 }
 
@@ -199,7 +193,6 @@ function update() {
     ball.x += ball.vx;
     ball.y += ball.vy;
 
-    // 壁
     if (ball.x < ball.r || ball.x > canvas.width - ball.r) ball.vx *= -1;
     if (ball.y < ball.r) ball.vy *= -1;
 
@@ -214,7 +207,6 @@ function update() {
         const ratio = (ball.x - center) / (paddle.w / 2);
         const angle = ratio * MAX_ANGLE;
         const speed = Math.hypot(ball.vx, ball.vy);
-
         ball.vx = speed * Math.sin(angle);
         ball.vy = -speed * Math.cos(angle);
     }
@@ -234,9 +226,14 @@ function update() {
             coverCtx.clearRect(b.x, b.y, bw, bh);
 
             if (brokenBlocks / totalBlocks >= CLEAR_RATE) {
-                gameClear = true;
+                stage++;
                 gameStarted = false;
-                document.getElementById('downloads').style.display = 'block';
+                if (stage >= stageImages.length) {
+                    gameClear = true;
+                    message.textContent = 'ALL STAGE CLEAR!';
+                } else {
+                    loadStage();
+                }
             }
         }
     });
@@ -247,6 +244,7 @@ function update() {
         gameStarted = false;
         if (lives <= 0) {
             gameOver = true;
+            message.textContent = 'GAME OVER';
         } else {
             resetBall();
         }
@@ -257,11 +255,19 @@ function update() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // 背景を canvas サイズに合わせて描画
-    ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+    // 背景
+    ctx.drawImage(bgImg, 0, 0);
 
-    // 覆い画像
+    // ブロック覆い
     ctx.drawImage(coverCanvas, 0, 0);
+
+    // 半透明オーバーレイ（壊れていないブロック）
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    blocks.forEach(b => {
+        if (b.alive) {
+            ctx.fillRect(b.x, b.y, bw, bh);
+        }
+    });
 
     // パドル
     ctx.fillStyle = 'white';
@@ -275,15 +281,14 @@ function draw() {
     ctx.fillText(`LIFE: ${lives}`, 10, canvas.height - 10);
 
     if (!gameStarted) {
-        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
         ctx.fillStyle = 'white';
         ctx.textAlign = 'center';
         ctx.font = '24px sans-serif';
 
-        if (gameClear) ctx.fillText('GAME CLEAR', canvas.width / 2, canvas.height / 2);
-        else if (gameOver) ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2);
+        if (gameOver) ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2);
+        else if (gameClear) ctx.fillText('GAME CLEAR!', canvas.width / 2, canvas.height / 2);
         else ctx.fillText('TAP or PRESS SPACE', canvas.width / 2, canvas.height / 2);
     }
 }
@@ -299,15 +304,8 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
-// ===== 初期化 =====
-Promise.all([
-    new Promise(r => bgImg.onload = r),
-    new Promise(r => coverImg.onload = r)
-]).then(() => {
-    initGameLayout();
-    initCover();
-    draw();
-});
+// ===== 開始 =====
+loadStage();
 </script>
 
 </body>
