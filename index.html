@@ -36,8 +36,8 @@ a {
 <canvas id="game"></canvas>
 
 <div id="downloads">
-    <a href="background.jpg" download>背景画像をダウンロード</a> |
-    <a href="cover.png" download>ブロック画像をダウンロード</a>
+    <a href="stage1.jpg" download>背景画像をダウンロード</a> |
+    <a href="stage2.jpg" download>ブロック画像をダウンロード</a>
 </div>
 
 <script>
@@ -46,10 +46,10 @@ const ctx = canvas.getContext('2d');
 
 // ===== 画像 =====
 const bgImg = new Image();
-bgImg.src = 'background.jpg';
+bgImg.src = 'stage1.jpg';
 
 const coverImg = new Image();
-coverImg.src = 'cover.png';
+coverImg.src = 'stage2.jpg';
 
 // ===== 状態 =====
 let gameStarted = false;
