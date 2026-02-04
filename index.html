@@ -98,16 +98,17 @@ const coverCtx = coverCanvas.getContext('2d');
 
 function initCover() {
     coverCtx.clearRect(0, 0, canvas.width, canvas.height);
-    coverCtx.drawImage(coverImg, 0, 0);
+    coverCtx.drawImage(coverImg, 0, 0, canvas.width, canvas.height);
 }
 
 // ===== レイアウト初期化 =====
 function initGameLayout() {
-    // canvasサイズを画像に合わせる
+    // canvasサイズを画像基準で設定
     canvas.width = bgImg.width;
     canvas.height = bgImg.height;
-    coverCanvas.width = bgImg.width;
-    coverCanvas.height = bgImg.height;
+
+    coverCanvas.width = canvas.width;
+    coverCanvas.height = canvas.height;
 
     // パドル
     paddle.y = canvas.height - 20;
@@ -140,9 +141,7 @@ let left = false;
 let right = false;
 
 document.addEventListener('keydown', e => {
-    if (e.code === 'Space') {
-        startGame();
-    }
+    if (e.code === 'Space') startGame();
     if (!gameStarted) return;
     if (e.key === 'ArrowLeft') left = true;
     if (e.key === 'ArrowRight') right = true;
@@ -168,11 +167,10 @@ canvas.addEventListener('touchmove', e => {
 function movePaddleByTouch(e) {
     const rect = canvas.getBoundingClientRect();
     const x = e.touches[0].clientX - rect.left;
-    paddle.x = x - paddle.w / 2;
-    paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, paddle.x));
+    paddle.x = Math.max(0, Math.min(canvas.width - paddle.w, x - paddle.w / 2));
 }
 
-// ===== ゲーム開始処理 =====
+// ===== ゲーム開始 =====
 function startGame() {
     if (gameStarted) return;
 
@@ -258,12 +256,18 @@ function update() {
 // ===== 描画 =====
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(bgImg, 0, 0);
+
+    // 背景を canvas サイズに合わせて描画
+    ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
+
+    // 覆い画像
     ctx.drawImage(coverCanvas, 0, 0);
 
+    // パドル
     ctx.fillStyle = 'white';
     ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
 
+    // ボール
     ctx.beginPath();
     ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
     ctx.fill();
